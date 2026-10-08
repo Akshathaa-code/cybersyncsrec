@@ -19,6 +19,13 @@ export async function listDocuments(): Promise<DocRow[]> {
   return (data ?? []) as DocRow[];
 }
 
+export async function deleteDocument(doc: DocRow) {
+  const { error: se } = await supabase.storage.from(BUCKET).remove([doc.storage_path]);
+  if (se) throw se;
+  const { error } = await supabase.from("documents").delete().eq("id", doc.id);
+  if (error) throw error;
+}
+
 export async function setStatus(id: string, status: DocStatus) {
   const { error } = await supabase.from("documents").update({ status }).eq("id", id);
   if (error) throw error;
