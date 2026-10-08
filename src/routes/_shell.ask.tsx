@@ -33,7 +33,9 @@ function Ask() {
   const [input, setInput] = useState("");
   const { open } = useEvidence();
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [msgs]);
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
 
   const ask = (q: string) => {
     if (!q.trim()) return;
