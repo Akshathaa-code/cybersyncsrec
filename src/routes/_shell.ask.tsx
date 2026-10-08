@@ -37,7 +37,7 @@ function Ask() {
 
   const ask = (q: string) => {
     if (!q.trim()) return;
-    const a = chatAnswers[q] ?? chatAnswers["What should I study first?"];
+    const a = chatAnswers[q] ?? chatAnswers["What should I study first?"]!;
     setMsgs((m) => [...m, { role: "user", text: q }, { role: "ai", text: "", typing: true }]);
     setInput("");
     setTimeout(() => setMsgs((m) => [...m.slice(0, -1), { role: "ai", text: a.text, sources: a.sources }]), 900);
