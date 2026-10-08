@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, FileText, Loader2, UploadCloud, Sparkles } from "lucide-react";
-import { initialFiles } from "@/lib/nexus-data";
+import { AlertCircle, CheckCircle2, FileText, Loader2, UploadCloud, Sparkles, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/nexus/PageHeader";
-import { listDocuments, setStatus, uploadPdf, type DocRow, type DocStatus } from "@/lib/documents";
+import { deleteDocument, listDocuments, setStatus, uploadPdf, type DocRow, type DocStatus } from "@/lib/documents";
 
 export const Route = createFileRoute("/_shell/vault")({
   head: () => ({
@@ -75,8 +74,13 @@ function Vault() {
     }, 2700);
   };
 
-  const demoPages = initialFiles.reduce((a, f) => a + f.pages, 0);
-  const total = docs.length + initialFiles.length;
+  const remove = async (d: DocRow) => {
+    if (!confirm(`Delete ${d.filename}?`)) return;
+    try { await deleteDocument(d); setDocs((x) => x.filter((y) => y.id !== d.id)); setMsg(null); }
+    catch (e) { setMsg(`Delete failed for ${d.filename}: ${(e as Error).message}`); }
+  };
+  const totalMb = (docs.reduce((a, d) => a + (d.size_bytes ?? 0), 0) / 1024 / 1024).toFixed(1);
+  const readyCount = docs.filter((d) => d.status === "ready" || d.status === "analyzed").length;
 
   return (
     <div>
@@ -102,7 +106,7 @@ function Vault() {
       </div>
 
       <div className="mt-8 grid grid-cols-3 gap-4">
-        {[[total, "Documents"], [docs.length, "Your uploads"], [demoPages.toLocaleString(), "Demo pages"]].map(([v, l]) => (
+        {[[docs.length, "Documents"], [readyCount, "Ready"], [`${totalMb} MB`, "Total size"]].map(([v, l]) => (
           <div key={l} className="card-surface p-5">
             <p className="font-display text-4xl">{v}</p>
             <p className="text-sm text-muted-foreground">{l}</p>
@@ -124,20 +128,7 @@ function Vault() {
               </p>
             </div>
             <StatusBadge s={f.status} />
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-8 mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Demo material (sample data)</p>
-      <div className="card-surface divide-y overflow-hidden opacity-80">
-        {initialFiles.map((f) => (
-          <div key={f.name} className="flex items-center gap-4 px-5 py-3.5">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-muted"><FileText className="h-4 w-4 text-muted-foreground" /></div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{f.name}</p>
-              <p className="text-xs text-muted-foreground">PDF · {f.pages} pages</p>
-            </div>
-            <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Demo</span>
+            <button onClick={() => remove(f)} disabled={f.status === "uploading"} aria-label={`Delete ${f.filename}`} className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-destructive disabled:opacity-40"><Trash2 className="h-4 w-4" /></button>
           </div>
         ))}
       </div>
