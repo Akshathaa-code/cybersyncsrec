@@ -10,32 +10,72 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as ShellIndexRouteImport } from './routes/_shell.index'
+import { Route as ShellAskRouteImport } from './routes/_shell.ask'
+import { Route as ShellMattersRouteImport } from './routes/_shell.matters'
+import { Route as ShellVaultRouteImport } from './routes/_shell.vault'
 
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShellIndexRoute = ShellIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellAskRoute = ShellAskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellMattersRoute = ShellMattersRouteImport.update({
+  id: '/matters',
+  path: '/matters',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellVaultRoute = ShellVaultRouteImport.update({
+  id: '/vault',
+  path: '/vault',
+  getParentRoute: () => ShellRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof ShellRoute
+  '/': typeof ShellIndexRoute
+  '/ask': typeof ShellAskRoute
+  '/matters': typeof ShellMattersRoute
+  '/vault': typeof ShellVaultRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof ShellRoute
+  '/ask': typeof ShellAskRoute
+  '/matters': typeof ShellMattersRoute
+  '/vault': typeof ShellVaultRoute
+  '/': typeof ShellIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_shell': typeof ShellRoute
+  '/_shell': typeof ShellRouteWithChildren
+  '/_shell/ask': typeof ShellAskRoute
+  '/_shell/matters': typeof ShellMattersRoute
+  '/_shell/vault': typeof ShellVaultRoute
+  '/_shell/': typeof ShellIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/ask' | '/matters' | '/vault'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/_shell'
+  to: '/ask' | '/matters' | '/vault' | '/'
+  id:
+    | '__root__'
+    | '/_shell'
+    | '/_shell/ask'
+    | '/_shell/matters'
+    | '/_shell/vault'
+    | '/_shell/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  ShellRoute: typeof ShellRoute
+  ShellRoute: typeof ShellRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -47,11 +87,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_shell/': {
+      id: '/_shell/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof ShellIndexRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ask': {
+      id: '/_shell/ask'
+      path: '/ask'
+      fullPath: '/ask'
+      preLoaderRoute: typeof ShellAskRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/matters': {
+      id: '/_shell/matters'
+      path: '/matters'
+      fullPath: '/matters'
+      preLoaderRoute: typeof ShellMattersRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/vault': {
+      id: '/_shell/vault'
+      path: '/vault'
+      fullPath: '/vault'
+      preLoaderRoute: typeof ShellVaultRouteImport
+      parentRoute: typeof ShellRoute
+    }
   }
 }
 
+interface ShellRouteChildren {
+  ShellAskRoute: typeof ShellAskRoute
+  ShellMattersRoute: typeof ShellMattersRoute
+  ShellVaultRoute: typeof ShellVaultRoute
+  ShellIndexRoute: typeof ShellIndexRoute
+}
+
+const ShellRouteChildren: ShellRouteChildren = {
+  ShellAskRoute: ShellAskRoute,
+  ShellMattersRoute: ShellMattersRoute,
+  ShellVaultRoute: ShellVaultRoute,
+  ShellIndexRoute: ShellIndexRoute,
+}
+
+const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  ShellRoute: ShellRoute,
+  ShellRoute: ShellRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
