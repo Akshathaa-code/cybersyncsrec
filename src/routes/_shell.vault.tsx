@@ -1,8 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-import { CheckCircle2, FileText, Loader2, UploadCloud, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertCircle, CheckCircle2, FileText, Loader2, UploadCloud, Sparkles } from "lucide-react";
 import { initialFiles } from "@/lib/nexus-data";
 import { PageHeader } from "@/components/nexus/PageHeader";
+import { listDocuments, setStatus, uploadPdf, type DocRow, type DocStatus } from "@/lib/documents";
 
 export const Route = createFileRoute("/_shell/vault")({
   head: () => ({
@@ -11,36 +12,71 @@ export const Route = createFileRoute("/_shell/vault")({
       { name: "description", content: "Your study material, organized in one place." },
       { property: "og:title", content: "Knowledge Vault — NEXUS" },
       { property: "og:description", content: "Your study material, organized in one place." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Vault,
 });
 
-const extra = ["OS PYQ 2021.pdf", "OS Module 5 - File Systems.pdf", "Synchronization Notes.pdf"];
 const phases = ["Reading your material...", "Finding repeated topics...", "Identifying priorities..."];
+const MAX = 20 * 1024 * 1024;
+
+function StatusBadge({ s }: { s: DocStatus }) {
+  if (s === "analyzed") return <span className="inline-flex items-center gap-1 text-xs font-semibold text-success"><CheckCircle2 className="h-3.5 w-3.5" /> Analyzed</span>;
+  if (s === "ready") return <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary"><CheckCircle2 className="h-3.5 w-3.5" /> Ready</span>;
+  if (s === "error") return <span className="inline-flex items-center gap-1 text-xs font-semibold text-destructive"><AlertCircle className="h-3.5 w-3.5" /> Error</span>;
+  return <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> {s === "uploading" ? "Uploading" : "Analyzing"}</span>;
+}
 
 function Vault() {
-  const [files, setFiles] = useState(initialFiles.map((f) => ({ ...f, done: true })));
+  const [docs, setDocs] = useState<DocRow[]>([]);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
   const [phase, setPhase] = useState(-1);
   const nav = useNavigate();
-  const added = useRef(0);
+  const input = useRef<HTMLInputElement>(null);
 
-  const addFile = () => {
-    const name = extra[added.current % extra.length] + (added.current >= extra.length ? ` (${added.current})` : "");
-    added.current++;
-    setFiles((f) => [{ name, pages: 12, done: false }, ...f]);
-    setTimeout(() => setFiles((f) => f.map((x) => (x.name === name ? { ...x, done: true } : x))), 1200);
+  useEffect(() => {
+    listDocuments().then(setDocs).catch((e) => setLoadErr(e.message ?? "Could not load documents"));
+  }, []);
+
+  const patch = (id: string, status: DocStatus) => setDocs((d) => d.map((x) => (x.id === id ? { ...x, status } : x)));
+
+  const handleFiles = async (list: FileList | null) => {
+    if (!list) return;
+    setMsg(null);
+    for (const file of Array.from(list)) {
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      if (!isPdf) { setMsg(`${file.name} is not a PDF.`); continue; }
+      if (file.size > MAX) { setMsg(`${file.name} is larger than 20 MB.`); continue; }
+      let id: string | null = null;
+      try {
+        const row = await uploadPdf(file, (r) => { id = r.id; setDocs((d) => [r, ...d]); });
+        patch(row.id, row.status);
+      } catch (e) {
+        if (id) patch(id, "error");
+        setMsg(`Upload failed for ${file.name}: ${(e as Error).message}`);
+      }
+    }
+    if (input.current) input.current.value = "";
   };
 
-  const analyze = () => {
+  const analyze = async () => {
     setPhase(0);
+    const ready = docs.filter((d) => d.status === "ready");
+    ready.forEach((d) => { patch(d.id, "analyzing"); setStatus(d.id, "analyzing").catch(() => {}); });
     setTimeout(() => setPhase(1), 900);
     setTimeout(() => setPhase(2), 1800);
-    setTimeout(() => nav({ to: "/matters" }), 2700);
+    setTimeout(async () => {
+      await Promise.all(ready.map((d) => setStatus(d.id, "analyzed").catch(() => {})));
+      nav({ to: "/matters" });
+    }, 2700);
   };
 
-  const pages = files.reduce((a, f) => a + f.pages, 0);
+  const demoPages = initialFiles.reduce((a, f) => a + f.pages, 0);
+  const total = docs.length + initialFiles.length;
 
   return (
     <div>
@@ -50,20 +86,23 @@ function Vault() {
         </button>
       </PageHeader>
 
+      <input ref={input} type="file" accept="application/pdf,.pdf" multiple hidden onChange={(e) => handleFiles(e.target.files)} />
+
       <div
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
-        onDrop={(e) => { e.preventDefault(); setDrag(false); addFile(); }}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files); }}
         className={`rounded-2xl border-2 border-dashed p-12 text-center transition ${drag ? "border-primary bg-accent" : "bg-card hover:border-primary/40"}`}
       >
         <UploadCloud className="mx-auto h-10 w-10 text-primary" strokeWidth={1.5} />
         <p className="mt-4 text-lg font-semibold">Drop your study material here</p>
-        <p className="mt-1 text-sm text-muted-foreground">PDF, notes, modules and previous-year papers</p>
-        <button onClick={addFile} className="mt-6 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted">Choose Files</button>
+        <p className="mt-1 text-sm text-muted-foreground">PDF files up to 20 MB — notes, modules and previous-year papers</p>
+        <button onClick={() => input.current?.click()} className="mt-6 rounded-lg border bg-background px-4 py-2 text-sm font-semibold transition hover:bg-muted">Choose Files</button>
+        {msg && <p className="mt-4 text-sm text-destructive">{msg}</p>}
       </div>
 
       <div className="mt-8 grid grid-cols-3 gap-4">
-        {[[files.length, "Documents"], [pages, "Pages"], [(1284 + (files.length - 9) * 61).toLocaleString(), "Sections"]].map(([v, l]) => (
+        {[[total, "Documents"], [docs.length, "Your uploads"], [demoPages.toLocaleString(), "Demo pages"]].map(([v, l]) => (
           <div key={l} className="card-surface p-5">
             <p className="font-display text-4xl">{v}</p>
             <p className="text-sm text-muted-foreground">{l}</p>
@@ -71,19 +110,34 @@ function Vault() {
         ))}
       </div>
 
-      <div className="mt-8 card-surface divide-y overflow-hidden">
-        {files.map((f) => (
-          <div key={f.name} className="flex items-center gap-4 px-5 py-3.5 transition hover:bg-muted/50 fade-up">
+      <p className="mt-8 mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Your uploads</p>
+      <div className="card-surface divide-y overflow-hidden">
+        {loadErr && <p className="px-5 py-4 text-sm text-destructive">{loadErr}</p>}
+        {!loadErr && docs.length === 0 && <p className="px-5 py-4 text-sm text-muted-foreground">No uploads yet. Choose a PDF to get started.</p>}
+        {docs.map((f) => (
+          <div key={f.id} className="flex items-center gap-4 px-5 py-3.5 transition hover:bg-muted/50 fade-up">
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-high-soft"><FileText className="h-4 w-4 text-high" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{f.filename}</p>
+              <p className="text-xs text-muted-foreground">
+                PDF{f.size_bytes ? ` · ${(f.size_bytes / 1024 / 1024).toFixed(1)} MB` : ""} · {new Date(f.created_at).toLocaleString()}
+              </p>
+            </div>
+            <StatusBadge s={f.status} />
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-8 mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Demo material (sample data)</p>
+      <div className="card-surface divide-y overflow-hidden opacity-80">
+        {initialFiles.map((f) => (
+          <div key={f.name} className="flex items-center gap-4 px-5 py-3.5">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-muted"><FileText className="h-4 w-4 text-muted-foreground" /></div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{f.name}</p>
               <p className="text-xs text-muted-foreground">PDF · {f.pages} pages</p>
             </div>
-            {f.done ? (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-success"><CheckCircle2 className="h-3.5 w-3.5" /> Analyzed</span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing</span>
-            )}
+            <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Demo</span>
           </div>
         ))}
       </div>
